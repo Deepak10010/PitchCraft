@@ -290,25 +290,25 @@ pitchCraft/
 
 ```mermaid
 flowchart LR
-    subgraph Input
+    subgraph Inputs
       A1[Preset melody<br/>lib/melodies.ts]
-      A2[Typed notes<br/>Custom editor]
+      A2[Typed notes<br/>custom editor]
       A3[Microphone<br/>lib/mic.ts]
     end
 
-    A3 -- float samples --> B1[YIN<br/>lib/yin.ts]
-    B1 -- freq --> B2[transcribe<br/>lib/transcribe.ts]
-    B2 -- Note[] --> C
+    A3 -- audio samples --> B1[YIN<br/>lib/yin.ts]
+    B1 -- frequency --> B2[Transcribe<br/>lib/transcribe.ts]
+    B2 -- notes --> C
 
     A1 --> P[parseMelody<br/>lib/intervals.ts]
     A2 --> P
-    P -- Note[] --> C
+    P -- notes --> C
 
-    C[analyzeMelody<br/>IntervalStep[]]
-    C --> V1[StaffView]
-    C --> V2[PianoView]
-    C --> V3[GuitarView]
-    C --> V4[IntervalBreakdown]
+    C[analyzeMelody<br/>intervals per step]
+    C --> V1[Staff view]
+    C --> V2[Piano view]
+    C --> V3[Guitar view]
+    C --> V4[Interval breakdown]
 
     C --> D[playMelody<br/>lib/audio.ts]
     D -- oscillators --> E[AudioContext<br/>Web Audio API]
