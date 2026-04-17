@@ -2,6 +2,10 @@
 
 > Turn any melody you already know into an interval flashcard.
 
+<p align="center">
+  <img src="docs/screenshots/hero.png" alt="PitchCraft decoder showing a melody with color-coded intervals" width="760" />
+</p>
+
 PitchCraft is a music ear-training web app built around one insight: **every famous melody is secretly a labeled interval exercise**. If you can hum "Somewhere Over the Rainbow," your brain already knows what an octave leap feels like — it just needs the label. PitchCraft attaches the labels.
 
 Pick a tune. Tap through its notes. You'll hear each interval back-to-back and see it decoded visually on a staff, piano, or guitar fretboard.
@@ -38,7 +42,13 @@ Pick a tune. Tap through its notes. You'll hear each interval back-to-back and s
 
 ### Melody library
 
+<p align="center">
+  <img src="docs/screenshots/home.png" alt="Home screen showing hero card and melody library with interval fingerprint strips" width="420" />
+</p>
+
 Ships with 12 curated melodies, each chosen because it *showcases one specific interval*. This is the "anchor a song to every interval" method — once you internalise `Jaws = m2`, your brain can recognise m2 anywhere it hears it.
+
+Each card has a tiny **interval fingerprint** underneath — a horizontal strip coloured by the melody's intervals, so each tune has a unique visual signature before you even tap it.
 
 | Interval | Anchor tune |
 | --- | --- |
@@ -63,6 +73,14 @@ The same melody rendered three ways, toggleable:
 - **Piano** — horizontal keyboard with used keys tinted + numbered.
 - **Guitar** — 15-fret standard-tuning fretboard with an optimal-fingering path calculated to minimize left-hand travel.
 
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/view-staff.png" alt="Staff view" width="240" /><br/><sub><b>Staff</b></sub></td>
+    <td align="center"><img src="docs/screenshots/view-piano.png" alt="Piano view" width="240" /><br/><sub><b>Piano</b></sub></td>
+    <td align="center"><img src="docs/screenshots/view-guitar.png" alt="Guitar view" width="240" /><br/><sub><b>Guitar</b></sub></td>
+  </tr>
+</table>
+
 All three update with the same active-note highlight during playback.
 
 ### Grand Piano + Acoustic Guitar synthesis
@@ -83,6 +101,10 @@ The active voice follows the view mode — Piano/Staff play with piano tone, Gui
 The first note is treated as the **tonic** (gold). Any note that's a **4th** above it (pink) or a **5th** above it (blue) gets a distinctive ring. Repeats across octaves — e.g., in a melody starting on C4, both G3 and G5 light up as the 5th.
 
 ### Hum it in (microphone input)
+
+<p align="center">
+  <img src="docs/screenshots/hum-recorder.png" alt="Humming recorder with live pitch meter and note count" width="520" />
+</p>
 
 Tap "Hum it in" on the custom-tune editor. Browser prompts for mic permission. Hum your melody — the app:
 
@@ -209,6 +231,13 @@ Each custom tune has two buttons at the bottom of its card: **Edit** and **Delet
 
 Top-right of every screen: a sun/moon icon. Tap to flip between light and dark. Choice persists.
 
+<table>
+  <tr>
+    <td align="center"><img src="docs/screenshots/theme-dark.png" alt="Dark theme" width="360" /><br/><sub><b>Dark</b></sub></td>
+    <td align="center"><img src="docs/screenshots/theme-light.png" alt="Light theme" width="360" /><br/><sub><b>Light</b></sub></td>
+  </tr>
+</table>
+
 ---
 
 ## Project structure
@@ -256,6 +285,34 @@ pitchCraft/
 ---
 
 ## Architecture notes
+
+### Data flow at a glance
+
+```mermaid
+flowchart LR
+    subgraph Input
+      A1[Preset melody<br/>lib/melodies.ts]
+      A2[Typed notes<br/>Custom editor]
+      A3[Microphone<br/>lib/mic.ts]
+    end
+
+    A3 -- float samples --> B1[YIN<br/>lib/yin.ts]
+    B1 -- freq --> B2[transcribe<br/>lib/transcribe.ts]
+    B2 -- Note[] --> C
+
+    A1 --> P[parseMelody<br/>lib/intervals.ts]
+    A2 --> P
+    P -- Note[] --> C
+
+    C[analyzeMelody<br/>IntervalStep[]]
+    C --> V1[StaffView]
+    C --> V2[PianoView]
+    C --> V3[GuitarView]
+    C --> V4[IntervalBreakdown]
+
+    C --> D[playMelody<br/>lib/audio.ts]
+    D -- oscillators --> E[AudioContext<br/>Web Audio API]
+```
 
 ### Platform-resolved audio context
 
@@ -369,3 +426,23 @@ iOS Safari note: audio playback needs a user gesture to start. The first tap on 
 - Export custom tunes to MIDI / MP3.
 - Share tunes via URL.
 - Offline PWA shell with `Add to Home Screen` support.
+
+---
+
+## Screenshots
+
+Images live in [`docs/screenshots/`](docs/screenshots/). The README references them by these filenames:
+
+| Filename | What to capture |
+| --- | --- |
+| `hero.png` | Decoder screen (Star Wars or Over the Rainbow) with staff view — 760 px wide |
+| `home.png` | Home screen with hero card + library — 420 px wide, portrait feel |
+| `view-staff.png` | Decoder → Staff view |
+| `view-piano.png` | Decoder → Piano view |
+| `view-guitar.png` | Decoder → Guitar view |
+| `hum-recorder.png` | Custom editor mid-recording (live pitch meter visible) |
+| `theme-dark.png` | Any screen in dark theme |
+| `theme-light.png` | Same screen in light theme |
+
+To capture: open `http://localhost:8081` at an appropriate window width, use your OS screenshot tool (`Win+Shift+S` on Windows, `Cmd+Shift+4` on macOS), crop, save with the filename above into `docs/screenshots/`. GitHub renders them automatically.
+
