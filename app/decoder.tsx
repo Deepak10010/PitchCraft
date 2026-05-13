@@ -16,7 +16,10 @@ import {
   noteLabel,
   INTERVALS,
   intervalHistogram,
+  intervalName,
+  intervalShortLabel,
 } from "../lib/intervals";
+import { useLabelMode } from "../theme/LabelModeContext";
 import { StaffView } from "../components/StaffView";
 import { PianoView } from "../components/PianoView";
 import { GuitarView } from "../components/GuitarView";
@@ -29,6 +32,7 @@ import { space, radius, type as type_, type ThemeColors } from "../theme/tokens"
 
 export default function Decoder() {
   const { colors } = useTheme();
+  const { mode } = useLabelMode();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -90,8 +94,16 @@ export default function Decoder() {
       setActiveIndex(null);
       return;
     }
+    if (!melody) return;
     setIsPlaying(true);
     setActiveIndex(null);
+    const scaledTimings =
+      melody.timings && melody.timings.length === notes.length
+        ? melody.timings.map((t) => ({
+            startSec: t.startSec / speed,
+            durationSec: t.durationSec / speed,
+          }))
+        : undefined;
     cancelPlaybackRef.current = playMelody(
       notes,
       voice,
@@ -101,7 +113,8 @@ export default function Decoder() {
       () => {
         setActiveIndex(null);
         setIsPlaying(false);
-      }
+      },
+      scaledTimings
     );
   };
 
@@ -132,6 +145,15 @@ export default function Decoder() {
         <Text style={styles.title}>{melody.title}</Text>
         {melody.hint ? <Text style={styles.hint}>{melody.hint}</Text> : null}
 
+        {topInterval?.meta.famousIndianTune && (
+          <View style={styles.indianAnchor}>
+            <Ionicons name="musical-note" size={12} color={colors.gold} />
+            <Text style={styles.indianAnchorText}>
+              {topInterval.meta.famousIndianTune}
+            </Text>
+          </View>
+        )}
+
         <View style={styles.metaRow}>
           <View style={[styles.metaChip, styles.metaKey]}>
             <View style={styles.keyDot} />
@@ -152,7 +174,9 @@ export default function Decoder() {
                 ]}
               />
               <Text style={styles.metaChipLabel}>Mostly</Text>
-              <Text style={styles.metaChipValue}>{topInterval.meta.short}</Text>
+              <Text style={styles.metaChipValue}>
+                {intervalShortLabel(topInterval.meta, mode)}
+              </Text>
             </View>
           )}
         </View>
@@ -256,7 +280,11 @@ export default function Decoder() {
           <View style={styles.drillHead}>
             <Ionicons name="flash" size={14} color={colors.accentBright} />
             <Text style={styles.drillTitle}>
-              Drill: {INTERVALS[semitonesFor(highlightInterval)]?.name ?? highlightInterval}
+              Drill:{" "}
+              {(() => {
+                const m = INTERVALS[semitonesFor(highlightInterval)];
+                return m ? intervalName(m, mode) : highlightInterval;
+              })()}
             </Text>
             <Pressable
               onPress={() => setHighlightInterval(null)}
@@ -306,7 +334,7 @@ const makeStyles = (c: ThemeColors) =>
       padding: space.lg,
       paddingBottom: space.xxl + space.sm,
       gap: space.lg,
-      maxWidth: 820,
+      maxWidth: 1200,
       width: "100%",
       alignSelf: "center",
     },
@@ -315,6 +343,25 @@ const makeStyles = (c: ThemeColors) =>
     header: { gap: space.sm },
     title: { ...type_.title, color: c.text, fontSize: 22 },
     hint: { ...type_.body, color: c.textMuted },
+    indianAnchor: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+      alignSelf: "flex-start",
+      paddingVertical: 4,
+      paddingHorizontal: 10,
+      borderRadius: radius.pill,
+      backgroundColor: c.goldTint,
+      borderWidth: 1,
+      borderColor: c.goldTintBorder,
+      marginTop: space.xs,
+    },
+    indianAnchorText: {
+      color: c.gold,
+      fontSize: 12,
+      fontWeight: "700",
+      letterSpacing: 0.1,
+    },
     metaRow: { flexDirection: "row", flexWrap: "wrap", gap: space.sm, marginTop: space.xs },
     metaChip: {
       flexDirection: "row",

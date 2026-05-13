@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { parseMelody, analyzeMelody } from "../lib/intervals";
+import { parseMelody, analyzeMelody, type NoteTiming } from "../lib/intervals";
 import {
   saveCustomMelody,
   newMelodyId,
@@ -46,6 +46,7 @@ export default function Custom() {
   const [title, setTitle] = useState("");
   const [hint, setHint] = useState("");
   const [notesRaw, setNotesRaw] = useState("C4 E4 G4 C5");
+  const [timings, setTimings] = useState<NoteTiming[] | null>(null);
   const [preview, setPreview] = useState<number | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("staff");
@@ -72,6 +73,7 @@ export default function Custom() {
         setTitle(found.title);
         setHint(found.hint);
         setNotesRaw(found.notes);
+        setTimings(found.timings ?? null);
         setLoadedForId(editingId);
       }
     });
@@ -105,6 +107,13 @@ export default function Custom() {
     if (notes.length < 1) return;
     setIsPlaying(true);
     setPreview(null);
+    const scaledTimings =
+      timings && timings.length === notes.length
+        ? timings.map((t) => ({
+            startSec: t.startSec / speed,
+            durationSec: t.durationSec / speed,
+          }))
+        : undefined;
     cancelPlaybackRef.current = playMelody(
       notes,
       voice,
@@ -114,7 +123,8 @@ export default function Custom() {
       () => {
         setPreview(null);
         setIsPlaying(false);
-      }
+      },
+      scaledTimings
     );
   };
 
@@ -134,12 +144,17 @@ export default function Custom() {
       setErr("Give your tune a title.");
       return;
     }
+    // Only persist timings when they line up with the parsed notes; if the user
+    // edited the text and the counts diverged, the saved rhythm would be wrong.
+    const validTimings =
+      timings && timings.length === notes.length ? timings : undefined;
     await saveCustomMelody({
       id: editingId ?? newMelodyId(),
       title: title.trim(),
       hint: hint.trim(),
       notes: notesRaw.trim(),
       builtin: false,
+      timings: validTimings,
     });
     router.back();
   };
@@ -199,8 +214,13 @@ export default function Custom() {
       <View style={styles.field}>
         <Text style={styles.label}>Notes</Text>
         <HumRecorder
-          onDetected={(notesString) => {
+          onDetected={(notesString, _notes, detectedTimings) => {
             setNotesRaw(notesString);
+            setTimings(
+              detectedTimings && detectedTimings.length > 0
+                ? detectedTimings
+                : null
+            );
           }}
         />
         <TextInput
@@ -208,7 +228,11 @@ export default function Custom() {
           placeholder="C4 E4 G4 C5"
           placeholderTextColor={colors.placeholder}
           value={notesRaw}
-          onChangeText={setNotesRaw}
+          onChangeText={(t) => {
+            setNotesRaw(t);
+            // Manual edit invalidates the captured rhythm.
+            setTimings(null);
+          }}
           autoCapitalize="characters"
           multiline
         />
@@ -219,6 +243,7 @@ export default function Custom() {
               style={styles.examplePill}
               onPress={() => {
                 setNotesRaw(ex.notes);
+                setTimings(null);
                 if (!title) setTitle(ex.label);
               }}
             >
@@ -324,7 +349,7 @@ const makeStyles = (c: ThemeColors) =>
       padding: space.lg,
       paddingBottom: space.xxl + space.xxl,
       gap: space.lg,
-      maxWidth: 720,
+      maxWidth: 1200,
       width: "100%",
       alignSelf: "center",
     },

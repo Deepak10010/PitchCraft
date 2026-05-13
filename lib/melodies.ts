@@ -5,6 +5,9 @@ export type Melody = {
   notes: string;
   builtin: boolean;
   anchorInterval?: string;
+  // Per-note timings captured from humming. Length must equal note count;
+  // when out of sync (user edited the notes string) consumers should ignore.
+  timings?: { startSec: number; durationSec: number }[];
 };
 
 export const PRESET_MELODIES: Melody[] = [

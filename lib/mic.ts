@@ -1,10 +1,10 @@
 import { Platform } from "react-native";
-import { yinDetect } from "./yin";
+import { detectPitch } from "./pitch";
 import { freqToMidi, type PitchSample } from "./transcribe";
 
 const FFT_SIZE = 2048;
 const POLL_MS = 35;
-const VOICE_MIN_HZ = 65;
+const VOICE_MIN_HZ = 55;
 const VOICE_MAX_HZ = 1500;
 
 export type MicSession = {
@@ -56,7 +56,7 @@ export async function startMicSession(): Promise<MicSession> {
 
   const interval = window.setInterval(() => {
     analyser.getFloatTimeDomainData(buffer);
-    const result = yinDetect(buffer, sampleRate);
+    const result = detectPitch(buffer, sampleRate);
     let midi: number | null = null;
     let clarity = 0;
     if (result && result.freq >= VOICE_MIN_HZ && result.freq <= VOICE_MAX_HZ) {

@@ -8,8 +8,16 @@ import {
 } from "react-native";
 import Svg, { Line, Circle, Text as SvgText, Rect } from "react-native-svg";
 import type { Note } from "../lib/intervals";
-import { analyzeMelody, noteLabel, rolesForMelody, ROLE_COLORS } from "../lib/intervals";
+import {
+  analyzeMelody,
+  noteLabel,
+  rolesForMelody,
+  ROLE_COLORS,
+  intervalShortLabel,
+  INTERVALS,
+} from "../lib/intervals";
 import { useTheme } from "../theme/ThemeContext";
+import { useLabelMode } from "../theme/LabelModeContext";
 
 type Props = {
   notes: Note[];
@@ -18,7 +26,7 @@ type Props = {
 };
 
 const H_PADDING = 28;
-const V_PADDING = 32;
+const V_PADDING = 40;
 const DEFAULT_SPACING = 64;
 const MAX_SPACING = 130;
 const MIN_SPACING = 30;
@@ -27,9 +35,17 @@ const NOTE_NAME_THRESHOLD = 34;
 const SEMITONE_HEIGHT = 10;
 const NOTE_RADIUS = 11;
 const MIN_HEIGHT = 190;
+const LINE_WIDTH_MIN = 1.75;
+const LINE_WIDTH_MAX = 6;
+
+function intervalLineWidth(semitones: number): number {
+  const clamped = Math.min(Math.max(semitones, 1), 12);
+  return LINE_WIDTH_MIN + ((clamped - 1) / 11) * (LINE_WIDTH_MAX - LINE_WIDTH_MIN);
+}
 
 export function StaffView({ notes, activeIndex, onTapNote }: Props) {
   const { colors } = useTheme();
+  const { mode } = useLabelMode();
   const { width: winW } = useWindowDimensions();
 
   if (notes.length === 0) {
@@ -41,7 +57,7 @@ export function StaffView({ notes, activeIndex, onTapNote }: Props) {
   }
 
   // Viewport available inside the decoder's scroll container.
-  const viewport = Math.min(winW - 48, 788);
+  const viewport = Math.min(winW - 48, 1180);
   const n = notes.length;
 
   // Layout strategy:
@@ -130,6 +146,9 @@ export function StaffView({ notes, activeIndex, onTapNote }: Props) {
           const y2 = yFor(s.to.midi);
           const midX = (x1 + x2) / 2;
           const midY = (y1 + y2) / 2;
+          const strokeW = intervalLineWidth(s.semitoneDistance);
+          const dashOn = (strokeW * 2.4).toFixed(2);
+          const dashOff = (strokeW * 1.6).toFixed(2);
           return (
             <React.Fragment key={`line-${i}`}>
               <Line
@@ -138,33 +157,38 @@ export function StaffView({ notes, activeIndex, onTapNote }: Props) {
                 x2={x2}
                 y2={y2}
                 stroke={s.interval.color}
-                strokeWidth={2.5}
-                strokeDasharray="6,4"
+                strokeWidth={strokeW}
+                strokeDasharray={`${dashOn},${dashOff}`}
+                strokeLinecap="round"
                 opacity={0.9}
               />
-              {showIntervalLabels && (
-                <>
-                  <Rect
-                    x={midX - 18}
-                    y={midY - 10}
-                    width={36}
-                    height={18}
-                    rx={4}
-                    fill={s.interval.color}
-                    opacity={0.95}
-                  />
-                  <SvgText
-                    x={midX}
-                    y={midY + 3}
-                    fontSize={11}
-                    fontWeight="700"
-                    fill="#0b1020"
-                    textAnchor="middle"
-                  >
-                    {s.interval.short}
-                  </SvgText>
-                </>
-              )}
+              {showIntervalLabels && (() => {
+                const label = intervalShortLabel(s.interval, mode);
+                const chipW = Math.max(36, label.length * 7 + 12);
+                return (
+                  <>
+                    <Rect
+                      x={midX - chipW / 2}
+                      y={midY - 10}
+                      width={chipW}
+                      height={18}
+                      rx={4}
+                      fill={s.interval.color}
+                      opacity={0.95}
+                    />
+                    <SvgText
+                      x={midX}
+                      y={midY + 3}
+                      fontSize={11}
+                      fontWeight="700"
+                      fill="#0b1020"
+                      textAnchor="middle"
+                    >
+                      {label}
+                    </SvgText>
+                  </>
+                );
+              })()}
             </React.Fragment>
           );
         })}
@@ -230,6 +254,30 @@ export function StaffView({ notes, activeIndex, onTapNote }: Props) {
                   {noteLabel(n)}
                 </SvgText>
               )}
+              {showNoteNames && notes.length > 0 && (() => {
+                const semis = (((n.midi - notes[0].midi) % 12) + 12) % 12;
+                const octaveShift = Math.floor((n.midi - notes[0].midi) / 12);
+                const meta = INTERVALS[semis];
+                if (!meta) return null;
+                let label = intervalShortLabel(meta, mode);
+                if (octaveShift > 0 && semis !== 0) label += "↑";
+                else if (octaveShift < 0) label += "↓";
+                else if (octaveShift > 0 && semis === 0)
+                  label = mode === "sargam" ? "Sa↑" : "P8";
+                const tint = roleColor ?? meta.color;
+                return (
+                  <SvgText
+                    x={x}
+                    y={y + NOTE_RADIUS + 14}
+                    fontSize={10}
+                    fontWeight="700"
+                    fill={tint}
+                    textAnchor="middle"
+                  >
+                    {label}
+                  </SvgText>
+                );
+              })()}
             </React.Fragment>
           );
         })}

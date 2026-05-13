@@ -1,8 +1,14 @@
 import React, { useMemo } from "react";
 import { View, Text, StyleSheet, Pressable } from "react-native";
 import type { IntervalStep } from "../lib/intervals";
-import { INTERVALS, intervalHistogram, dominantInsight } from "../lib/intervals";
+import {
+  INTERVALS,
+  intervalHistogram,
+  dominantInsight,
+  intervalName,
+} from "../lib/intervals";
 import { useTheme } from "../theme/ThemeContext";
+import { useLabelMode } from "../theme/LabelModeContext";
 import { radius, type ThemeColors } from "../theme/tokens";
 
 type Props = {
@@ -12,12 +18,13 @@ type Props = {
 
 export function IntervalBreakdown({ steps, onDrillInterval }: Props) {
   const { colors } = useTheme();
+  const { mode } = useLabelMode();
   const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const hist = intervalHistogram(steps);
   const total = steps.length;
   const rows = Array.from(hist.entries()).sort((a, b) => b[1] - a[1]);
-  const insight = dominantInsight(steps);
+  const insight = dominantInsight(steps, mode);
 
   return (
     <View style={styles.wrap}>
@@ -43,7 +50,9 @@ export function IntervalBreakdown({ steps, onDrillInterval }: Props) {
                         { backgroundColor: interval?.color ?? "#888" },
                       ]}
                     />
-                    <Text style={styles.label}>{interval?.name ?? short}</Text>
+                    <Text style={styles.label}>
+                      {interval ? intervalName(interval, mode) : short}
+                    </Text>
                   </View>
                   <View style={styles.barTrack}>
                     <View

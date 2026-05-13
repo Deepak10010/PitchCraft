@@ -1,4 +1,4 @@
-import { midiToFreq, type Note } from "./intervals";
+import { midiToFreq, type Note, type NoteTiming } from "./intervals";
 import { getAudioContext, isAudioAvailable } from "./audioContext";
 
 export type Voice = "piano" | "guitar";
@@ -102,7 +102,8 @@ export function playMelody(
   noteDur = 0.5,
   gap = 0.06,
   onStep?: (idx: number) => void,
-  onDone?: () => void
+  onDone?: () => void,
+  timings?: NoteTiming[]
 ): () => void {
   const c = getAudioContext();
   if (!c) {
@@ -112,19 +113,37 @@ export function playMelody(
   resume();
   let cancelled = false;
   const timers: ReturnType<typeof setTimeout>[] = [];
+
+  const useTimings =
+    timings && timings.length === notes.length && timings.length > 0;
+
+  let totalDur = 0;
   notes.forEach((n, i) => {
-    const startAt = i * (noteDur + gap);
-    playVoice(midiToFreq(n.midi), noteDur, startAt, voice);
+    let startAt: number;
+    let dur: number;
+    if (useTimings) {
+      // Caller already pre-scaled timings by speed; we just use them as-is.
+      startAt = timings![i].startSec;
+      dur = Math.max(0.05, timings![i].durationSec);
+    } else {
+      startAt = i * (noteDur + gap);
+      dur = noteDur;
+    }
+    playVoice(midiToFreq(n.midi), dur, startAt, voice);
     timers.push(
       setTimeout(() => {
         if (!cancelled) onStep?.(i);
       }, startAt * 1000)
     );
+    totalDur = Math.max(totalDur, startAt + dur);
   });
+  if (!useTimings) {
+    totalDur = notes.length * (noteDur + gap);
+  }
   timers.push(
     setTimeout(() => {
       if (!cancelled) onDone?.();
-    }, notes.length * (noteDur + gap) * 1000)
+    }, totalDur * 1000)
   );
   return () => {
     cancelled = true;
@@ -133,3 +152,83 @@ export function playMelody(
 }
 
 export const audioAvailable = isAudioAvailable;
+
+// Continuous tanpura drone, cycling Sa↑ → Pa → Sa → Sa↓ on a relaxed pluck
+// pattern with overlapping decays. Routed through one master gain so stop()
+// can ramp the whole thing to silence cleanly without leaving stray oscillators
+// scheduled past the cancel point.
+export function startTanpuraDrone(saMidi: number): () => void {
+  const c = getAudioContext();
+  if (!c) return () => {};
+  resume();
+
+  const pattern = [saMidi + 12, saMidi + 7, saMidi, saMidi - 12];
+  const STRIDE_SEC = 1.4;
+  const PLUCK_DUR = 3.2;
+  const TOTAL_CYCLES = 80; // ~7.5 minutes of drone — covers any drill session.
+
+  const droneGain = c.createGain();
+  droneGain.gain.value = 1;
+  droneGain.connect(c.destination);
+
+  const oscillators: OscillatorNode[] = [];
+  const baseTime = c.currentTime;
+
+  const droneHarmonics: Harmonic[] = [
+    { ratio: 1, amp: 1.0, type: "sine" },
+    { ratio: 2, amp: 0.55, type: "sine" },
+    { ratio: 3, amp: 0.32, type: "sine" },
+    { ratio: 4, amp: 0.18, type: "sine" },
+    { ratio: 5, amp: 0.1, type: "sine" },
+  ];
+
+  for (let cycle = 0; cycle < TOTAL_CYCLES; cycle++) {
+    pattern.forEach((midi, i) => {
+      const t0 = baseTime + (cycle * pattern.length + i) * STRIDE_SEC;
+      const tEnd = t0 + PLUCK_DUR;
+
+      const pluckGain = c.createGain();
+      pluckGain.gain.setValueAtTime(0.0001, t0);
+      pluckGain.gain.exponentialRampToValueAtTime(0.09, t0 + 0.04);
+      pluckGain.gain.exponentialRampToValueAtTime(0.04, t0 + 0.5);
+      pluckGain.gain.exponentialRampToValueAtTime(0.015, t0 + PLUCK_DUR * 0.7);
+      pluckGain.gain.linearRampToValueAtTime(0.0001, tEnd);
+
+      const filter = c.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.setValueAtTime(2200, t0);
+      filter.frequency.exponentialRampToValueAtTime(900, tEnd);
+      filter.Q.value = 0.7;
+      pluckGain.connect(filter).connect(droneGain);
+
+      const freq = midiToFreq(midi);
+      droneHarmonics.forEach(({ ratio, amp, type }) => {
+        const hz = freq * ratio;
+        if (hz > 18000) return;
+        const osc = c.createOscillator();
+        osc.type = type;
+        osc.frequency.value = hz;
+        const g = c.createGain();
+        g.gain.value = amp;
+        osc.connect(g).connect(pluckGain);
+        osc.start(t0);
+        osc.stop(tEnd + 0.1);
+        oscillators.push(osc);
+      });
+    });
+  }
+
+  return () => {
+    const t = c.currentTime;
+    droneGain.gain.cancelScheduledValues(t);
+    droneGain.gain.setValueAtTime(droneGain.gain.value, t);
+    droneGain.gain.linearRampToValueAtTime(0.0001, t + 0.15);
+    setTimeout(() => {
+      for (const osc of oscillators) {
+        try {
+          osc.stop();
+        } catch {}
+      }
+    }, 200);
+  };
+}

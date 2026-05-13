@@ -8,14 +8,18 @@ import {
   midiLabel,
   type PitchSample,
 } from "../lib/transcribe";
-import type { Note } from "../lib/intervals";
+import type { Note, NoteTiming } from "../lib/intervals";
 import { useTheme } from "../theme/ThemeContext";
 import { radius, space, type as type_, type ThemeColors } from "../theme/tokens";
 
-type Status = "idle" | "requesting" | "recording" | "processing";
+type Status = "idle" | "requesting" | "recording";
 
 type Props = {
-  onDetected: (notesString: string, notes: Note[]) => void;
+  onDetected: (
+    notesString: string,
+    notes: Note[],
+    timings?: NoteTiming[]
+  ) => void;
 };
 
 export function HumRecorder({ onDetected }: Props) {
@@ -58,7 +62,7 @@ export function HumRecorder({ onDetected }: Props) {
       startRef.current = Date.now();
       session.onSample((s) => {
         partialSamplesRef.current.push(s);
-        if (s.midi !== null && s.clarity >= 0.72) {
+        if (s.midi !== null && s.clarity >= 0.55) {
           setCurrentMidi(s.midi);
           setClarity(s.clarity);
         } else {
@@ -68,7 +72,7 @@ export function HumRecorder({ onDetected }: Props) {
       tickerRef.current = setInterval(() => {
         setElapsed(Math.floor((Date.now() - startRef.current) / 100) / 10);
         const live = segmentToNotes(partialSamplesRef.current);
-        setNoteCount(live.length);
+        setNoteCount(live.notes.length);
       }, 150);
       setStatus("recording");
     } catch (e: any) {
@@ -83,14 +87,15 @@ export function HumRecorder({ onDetected }: Props) {
 
   const stop = () => {
     if (!sessionRef.current) return;
-    setStatus("processing");
     const samples = sessionRef.current.stop();
     sessionRef.current = null;
     if (tickerRef.current) {
       clearInterval(tickerRef.current);
       tickerRef.current = null;
     }
-    const notes = segmentToNotes(samples);
+
+    const { notes, timings } = segmentToNotes(samples);
+
     if (notes.length === 0) {
       setStatus("idle");
       setErrMsg(
@@ -100,7 +105,7 @@ export function HumRecorder({ onDetected }: Props) {
       );
       return;
     }
-    onDetected(notesToString(notes), notes);
+    onDetected(notesToString(notes), notes, timings);
     setErrMsg(
       notes.length === 1
         ? "Only caught 1 note — you can add more, or hum again."
